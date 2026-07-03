@@ -1,24 +1,24 @@
-# Consolidated Replay in Oracle RAT
+# Consolidated Replay no Oracle RAT
 
-[English](./README-oracle-rat-consolidated-replay.md) | [Português (Brasil)](./README-oracle-rat-consolidated-replay.pt-BR.md)
+[English](./README-oracle-rat-consolidated-replay.md) | **Português (Brasil)**
 
-GitHub Markdown guide based on the Consolidated Replay procedure with Oracle Real Application Testing.
+Guia em Markdown para GitHub, baseado no procedimento descrito no artigo sobre `Consolidated Replay` com Oracle Real Application Testing.
 
-## Overview
+## Visao Geral
 
-This guide describes a performance-testing flow using Database Replay in an Oracle multitenant environment, consolidating workload captures from multiple PDBs into one replay.
+Este material descreve um fluxo de teste de performance usando `Database Replay` em ambiente Oracle multitenant, consolidando capturas de workload de multiplos PDBs em um unico replay.
 
-Reference scenario:
+Cenario de referencia:
 
-- Oracle RAC source environment `Oracle RAC`
-- multitenant database with multiple PDBs
+- ambiente de origem em `Oracle RAC`
+- banco `multitenant` com varios PDBs
 - `standby fisico` criado no novo hardware
-- standby later converted to `snapshot standby`
-- replay executed on the target environment
+- conversao posterior do standby para `snapshot standby`
+- execucao do replay nesse ambiente de destino
 
-## Directory Structure
+## Estrutura de Diretorios
 
-Store captures in a root directory with one subdirectory per PDB:
+As capturas devem ficar organizadas em um diretorio raiz com um subdiretorio por PDB:
 
 ```text
 /u01/rat
@@ -28,13 +28,13 @@ Store captures in a root directory with one subdirectory per PDB:
 `-- pdb4
 ```
 
-This structure supports Consolidated Replay, where multiple captures are grouped and executed simultaneously.
+Essa estrutura facilita o uso do `Consolidated Replay`, no qual varias capturas sao agrupadas e executadas simultaneamente.
 
-## 1. Capture Workload per PDB
+## 1. Captura do Workload por PDB
 
-In a multitenant environment, capture workload individually in each PDB.
+Em ambiente multitenant, a captura precisa ser feita individualmente em cada PDB.
 
-Example:
+Exemplo:
 
 ```sql
 ALTER SESSION SET CONTAINER=PDB1;
@@ -46,11 +46,11 @@ EXEC DBMS_WORKLOAD_CAPTURE.START_CAPTURE(
 );
 ```
 
-Repeat the procedure for the remaining PDBs, pointing each PDB to its own directory.
+Repita o procedimento para os demais PDBs, apontando cada um para seu proprio diretorio.
 
-## 2. Export AWR from Captures
+## 2. Exportacao do AWR das Capturas
 
-After each capture, export its PDB AWR data for later comparison with the replay:
+Ao final da captura, exporte os dados de AWR de cada PDB para permitir a comparacao posterior com o replay:
 
 ```sql
 ALTER SESSION SET CONTAINER=PDB1;
@@ -60,7 +60,7 @@ END;
 /
 ```
 
-To find `capture_id`, query:
+Para descobrir o `capture_id`, consulte:
 
 ```sql
 SELECT id capture_id,
@@ -72,15 +72,15 @@ SELECT id capture_id,
  ORDER BY id DESC;
 ```
 
-## 3. Prepare the Snapshot Standby
+## 3. Preparacao do Snapshot Standby
 
-Before the replay:
+Antes do replay:
 
 - converter o `standby fisico` em `snapshot standby`
 - montar o armazenamento compartilhado com os arquivos das capturas
 - criar os diretorios no `CDB$ROOT`
 
-Example:
+Exemplo:
 
 ```sql
 CREATE DIRECTORY RAT_DIR  AS '/u01/rat/';
@@ -90,9 +90,9 @@ CREATE DIRECTORY PDB3_DIR AS '/u01/rat/pdb3';
 CREATE DIRECTORY PDB4_DIR AS '/u01/rat/pdb4';
 ```
 
-## 4. Process the Captures
+## 4. Processamento das Capturas
 
-Process each capture before replay:
+Cada captura deve ser processada antes do replay:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.PROCESS_CAPTURE('PDB1_DIR');
@@ -101,15 +101,15 @@ EXEC DBMS_WORKLOAD_REPLAY.PROCESS_CAPTURE('PDB3_DIR');
 EXEC DBMS_WORKLOAD_REPLAY.PROCESS_CAPTURE('PDB4_DIR');
 ```
 
-Then set the replay root directory:
+Depois, defina o diretorio raiz do replay:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.SET_REPLAY_DIRECTORY('RAT_DIR');
 ```
 
-## 5. Create the Replay Schedule
+## 5. Criacao do Replay Schedule
 
-Because there are multiple captures, create a consolidated schedule:
+Como existem varias capturas, e necessario criar um `schedule` consolidado:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.BEGIN_REPLAY_SCHEDULE('MY_SCHEDULE');
@@ -120,7 +120,7 @@ SELECT DBMS_WORKLOAD_REPLAY.ADD_CAPTURE('PDB4_DIR') FROM DUAL;
 EXEC DBMS_WORKLOAD_REPLAY.END_REPLAY_SCHEDULE;
 ```
 
-The generated `schedule_cap_id` values are required for connection remapping:
+Os `schedule_cap_id` gerados nessa etapa sao fundamentais para o remapeamento das conexoes:
 
 ```sql
 SELECT schedule_cap_id, capture_dir
@@ -128,9 +128,9 @@ SELECT schedule_cap_id, capture_dir
  WHERE schedule_name = 'MY_SCHEDULE';
 ```
 
-## 6. Initialize Consolidated Replay
+## 6. Inicializacao do Consolidated Replay
 
-With the schedule ready:
+Com o schedule pronto:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.INITIALIZE_CONSOLIDATED_REPLAY(
@@ -139,11 +139,11 @@ EXEC DBMS_WORKLOAD_REPLAY.INITIALIZE_CONSOLIDATED_REPLAY(
 );
 ```
 
-## 7. Remap Connections
+## 7. Remapeamento das Conexoes
 
-Because replay is initialized in `CDB$ROOT`, redirect each connection to the correct service for its PDB.
+Como o replay e inicializado no `CDB$ROOT`, cada conexao precisa ser redirecionada ao servico correto do PDB correspondente.
 
-Supporting query:
+Consulta de apoio:
 
 ```sql
 SELECT conn_id, schedule_cap_id, replay_conn
@@ -151,7 +151,7 @@ SELECT conn_id, schedule_cap_id, replay_conn
  WHERE replay_id = 1;
 ```
 
-Manual remapping example:
+Exemplo de remapeamento manual:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.REMAP_CONNECTION(
@@ -161,11 +161,11 @@ EXEC DBMS_WORKLOAD_REPLAY.REMAP_CONNECTION(
 );
 ```
 
-For many connections, automate remapping with PL/SQL and use `schedule_cap_id` to select the correct `SERVICE_NAME`.
+Quando houver muitas conexoes, vale automatizar o remapeamento com PL/SQL usando `schedule_cap_id` para decidir qual `SERVICE_NAME` aplicar.
 
-## 8. Prepare the Replay
+## 8. Preparacao do Replay
 
-After remapping:
+Depois do remapeamento:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.PREPARE_CONSOLIDATED_REPLAY(
@@ -173,9 +173,9 @@ EXEC DBMS_WORKLOAD_REPLAY.PREPARE_CONSOLIDATED_REPLAY(
 );
 ```
 
-## 9. Calibrate with WRC
+## 9. Calibracao com WRC
 
-Calibrate each capture directory:
+A calibracao deve ser executada para cada diretorio de captura:
 
 ```bash
 wrc system@my_cdb mode=calibrate replaydir=/u01/rat/PDB1
@@ -184,23 +184,23 @@ wrc system@my_cdb mode=calibrate replaydir=/u01/rat/PDB3
 wrc system@my_cdb mode=calibrate replaydir=/u01/rat/PDB4
 ```
 
-Sum the client recommendations from all directories to determine how many `wrc` processes to start.
+Some a recomendacao de clients de todos os diretorios para definir quantos processos `wrc` devem ser iniciados no replay consolidado.
 
-Important: in Consolidated Replay, clients must point to the root directory, not individual subdirectories.
+Importante: no `Consolidated Replay`, os clients devem apontar para o diretorio raiz, e nao para os subdiretorios individuais.
 
 ```bash
 nohup wrc system/senha@my_cdb mode=replay replaydir=/u01/rat > out1.log 2>&1 &
 ```
 
-## 10. Start and Monitor the Replay
+## 10. Inicio e Acompanhamento do Replay
 
-With the clients connected:
+Com os clients conectados:
 
 ```sql
 EXEC DBMS_WORKLOAD_REPLAY.START_CONSOLIDATED_REPLAY;
 ```
 
-To monitor status:
+Para acompanhar o status:
 
 ```sql
 SELECT id, name, start_time, end_time, status
@@ -208,7 +208,7 @@ SELECT id, name, start_time, end_time, status
  ORDER BY id DESC;
 ```
 
-## 11. Import AWR and Generate the Comparison Report
+## 11. Importacao do AWR e Relatorio Comparativo
 
 Crie um schema de staging para importar os dados de AWR exportados nas capturas:
 
@@ -240,7 +240,7 @@ EXEC DBMS_WORKLOAD_REPLAY.COMPARE_PERIOD_REPORT(
 );
 ```
 
-## Practical Notes
+## Observacoes Praticas
 
 - Em ambiente multitenant, cada PDB exige sua propria captura.
 - O ponto central do `Consolidated Replay` e agrupar as capturas em um `schedule`.
