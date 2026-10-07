@@ -16,6 +16,32 @@ Reference scenario:
 - standby later converted to `snapshot standby`
 - replay executed on the target environment
 
+## Procedure architecture
+
+```mermaid
+flowchart LR
+    subgraph CAPTURE["Capture per source PDB"]
+        P1[("PDB 1")]
+        P2[("PDB 2 ... N")]
+        C1["Capture 1 and AWR"]
+        C2["Captures 2 ... N and AWR"]
+        P1 --> C1
+        P2 --> C2
+    end
+    subgraph REPLAY["Consolidated replay"]
+        PROCESS["Process captures<br/>on shared storage"]
+        SCHEDULE["Build schedule<br/>and remap PDB services"]
+        CLIENTS["Prepare replay<br/>calibrate and start WRC"]
+        PROCESS --> SCHEDULE --> CLIENTS
+    end
+    C1 --> PROCESS
+    C2 --> PROCESS
+    CLIENTS --> TGT[("Snapshot standby<br/>target PDBs")]
+    TGT --> REPORT["AWR comparison<br/>and performance validation"]
+    C1 -. "Baseline" .-> REPORT
+    C2 -. "Baseline" .-> REPORT
+```
+
 ## Directory Structure
 
 Store captures in a root directory with one subdirectory per PDB:
